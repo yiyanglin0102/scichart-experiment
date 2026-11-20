@@ -30,6 +30,74 @@
   color: #aab8c8;
 }
 
+.chart-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.control-button {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid #3b5066;
+  border-radius: 8px;
+  background: #1a2837;
+  color: #eaf1f8;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.control-button:hover:not(:disabled) {
+  border-color: #83b3e4;
+  background: #24384d;
+}
+
+.control-button:focus-visible {
+  outline: 2px solid #83b3e4;
+  outline-offset: 2px;
+}
+
+.control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.control-button-primary {
+  border-color: #438acb;
+  background: #2469a6;
+}
+
+.control-button-primary:hover:not(:disabled) {
+  border-color: #75b8f3;
+  background: #2d7fc3;
+}
+
+.chart-stat {
+  display: flex;
+  min-width: 116px;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.chart-stat-label {
+  color: #93a6b9;
+  font-size: 0.75rem;
+}
+
+.chart-stat strong {
+  color: #f3f6fa;
+  font-variant-numeric: tabular-nums;
+}
+
 .chart-frame {
   height: min(600px, 68vh);
   min-height: 360px;
@@ -43,6 +111,21 @@
 .chart {
   width: 100%;
   height: 100%;
+}
+
+.chart-loading {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #aab8c8;
+}
+
+.chart-hint {
+  margin: 12px 0 0;
+  color: #93a6b9;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 .licensing {
@@ -78,5 +161,9 @@
   .chart-frame {
     height: 62vh;
     min-height: 320px;
+  }
+
+  .chart-stat {
+    margin-left: 0;
   }
 }

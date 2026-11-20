@@ -1,6 +1,6 @@
 # SciChart.js React demo
 
-A Vite + React example featuring an animated line chart, numeric axes, point markers, and zoom/pan interactions. SciChart.js WebAssembly assets are served locally from the app; chart rendering does not rely on a WASM CDN.
+A Vite + React example featuring a high-frequency, three-series live chart, numeric axes, and zoom/pan interactions. Each series receives 1,000 points every 10 ms and keeps a bounded 100,000-point FIFO window. SciChart.js WebAssembly assets are served locally from the app; chart rendering does not rely on a WASM CDN.
 
 ## Licensing
 
