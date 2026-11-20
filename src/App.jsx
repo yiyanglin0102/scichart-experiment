@@ -1,269 +1,189 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-  EAutoRange,
-  FastLineRenderableSeries,
-  MouseWheelZoomModifier,
+  CameraController,
+  GradientColorPalette,
+  MouseWheelZoomModifier3D,
   NumberRange,
-  NumericAxis,
+  NumericAxis3D,
+  OrbitModifier3D,
+  ResetCamera3DModifier,
+  SciChart3DSurface,
   SciChartJsNavyTheme,
   SciChartSurface,
-  XyDataSeries,
-  ZoomExtentsModifier,
-  ZoomPanModifier,
+  SurfaceMeshRenderableSeries3D,
+  UniformGridDataSeries3D,
+  Vector3,
+  zeroArray2D,
 } from "scichart";
 import { SciChartReact } from "scichart-react";
 import "./App.css";
 
 SciChartSurface.loadWasmLocal();
 
-const POINTS_PER_TICK = 1000;
-const UPDATE_INTERVAL_MS = 10;
-const MAX_POINTS_PER_SERIES = 100_000;
-const STATS_INTERVAL_MS = 500;
-const SERIES_COLORS = ["#ff5722", "#2196f3", "#4caf50"];
+const GRID_SIZE = 50;
+const UPDATE_INTERVAL_MS = 20;
 
-class RandomWalkGenerator {
-  constructor(xStart = 0, yStart = 10) {
-    this.x = xStart;
-    this.y = yStart;
-  }
-
-  getSeries(count) {
-    const xValues = [];
-    const yValues = [];
-    for (let i = 0; i < count; i += 1) {
-      this.x += 1;
-      this.y += Math.random() * 2 - 1;
-      xValues.push(this.x);
-      yValues.push(this.y);
-    }
-    return { xValues, yValues };
-  }
-}
-
-function RealtimeChart() {
-  const [fps, setFps] = useState(0);
-  const [pointCount, setPointCount] = useState(0);
+function Realtime3DChart() {
   const [isRunning, setIsRunning] = useState(false);
   const [isChartReady, setIsChartReady] = useState(false);
-
   const chartRef = useRef(null);
-  const updateTimerRef = useRef(null);
-  const statsTimerRef = useRef(null);
-  const isRunningRef = useRef(false);
-  const renderCountRef = useRef(0);
 
-  const clearTimers = useCallback(() => {
-    if (updateTimerRef.current !== null) {
-      window.clearInterval(updateTimerRef.current);
-      updateTimerRef.current = null;
-    }
-    if (statsTimerRef.current !== null) {
-      window.clearInterval(statsTimerRef.current);
-      statsTimerRef.current = null;
-    }
-    isRunningRef.current = false;
+  const initChart = useCallback(async (rootElement) => {
+    const { sciChart3DSurface, wasmContext } = await SciChart3DSurface.create(
+      rootElement,
+      { theme: new SciChartJsNavyTheme() },
+    );
+
+    sciChart3DSurface.camera = new CameraController(wasmContext, {
+      position: new Vector3(-150, 200, 150),
+      target: new Vector3(GRID_SIZE / 2, 0, GRID_SIZE / 2),
+    });
+    sciChart3DSurface.worldDimensions = new Vector3(200, 100, 200);
+
+    sciChart3DSurface.xAxis = new NumericAxis3D(wasmContext, {
+      axisTitle: "X",
+    });
+    sciChart3DSurface.yAxis = new NumericAxis3D(wasmContext, {
+      axisTitle: "Y",
+      visibleRange: new NumberRange(-0.6, 0.6),
+    });
+    sciChart3DSurface.zAxis = new NumericAxis3D(wasmContext, {
+      axisTitle: "Z",
+    });
+
+    const heightmap = zeroArray2D([GRID_SIZE, GRID_SIZE]);
+    const dataSeries = new UniformGridDataSeries3D(wasmContext, {
+      yValues: heightmap,
+      xStep: 1,
+      zStep: 1,
+    });
+    const yValues = dataSeries.getYValues();
+
+    const colorPalette = new GradientColorPalette(wasmContext, {
+      gradientStops: [
+        { offset: 0, color: "#14233c" },
+        { offset: 0.5, color: "#50c7e0" },
+        { offset: 1, color: "#ec0f6c" },
+      ],
+    });
+
+    sciChart3DSurface.renderableSeries.add(
+      new SurfaceMeshRenderableSeries3D(wasmContext, {
+        dataSeries,
+        meshColorPalette: colorPalette,
+        minimum: -0.5,
+        maximum: 0.5,
+      }),
+    );
+    sciChart3DSurface.chartModifiers.add(
+      new MouseWheelZoomModifier3D(),
+      new OrbitModifier3D(),
+      new ResetCamera3DModifier(),
+    );
+
+    let timerId = null;
+    let frame = 0;
+    const updateData = () => {
+      const phase = frame / 10;
+      for (let z = 0; z < GRID_SIZE; z += 1) {
+        for (let x = 0; x < GRID_SIZE; x += 1) {
+          yValues[z][x] =
+            Math.cos((x + phase) * 0.2) *
+            Math.sin((z + phase) * 0.2) *
+            0.5;
+        }
+      }
+      dataSeries.notifyDataChanged();
+      frame += 1;
+    };
+
+    const controls = {
+      startUpdate: () => {
+        if (timerId === null) {
+          timerId = window.setInterval(updateData, UPDATE_INTERVAL_MS);
+        }
+      },
+      stopUpdate: () => {
+        if (timerId !== null) {
+          window.clearInterval(timerId);
+          timerId = null;
+        }
+      },
+    };
+
+    return {
+      sciChartSurface: sciChart3DSurface,
+      controls,
+      destructor: controls.stopUpdate,
+    };
   }, []);
 
-  const stopUpdate = useCallback(() => {
-    clearTimers();
-    setIsRunning(false);
-  }, [clearTimers]);
-
-  const initChart = useCallback(
-    async (rootElement) => {
-      const { sciChartSurface, wasmContext } = await SciChartSurface.create(
-        rootElement,
-        { theme: new SciChartJsNavyTheme() },
-      );
-
-      sciChartSurface.xAxes.add(
-        new NumericAxis(wasmContext, {
-          autoRange: EAutoRange.Always,
-          growBy: new NumberRange(0.1, 0.1),
-        }),
-      );
-      sciChartSurface.yAxes.add(
-        new NumericAxis(wasmContext, {
-          autoRange: EAutoRange.Always,
-          growBy: new NumberRange(0.1, 0.1),
-        }),
-      );
-
-      const dataSeriesList = SERIES_COLORS.map((stroke, index) => {
-        const dataSeries = new XyDataSeries(wasmContext, {
-          fifoCapacity: MAX_POINTS_PER_SERIES,
-          dataSeriesName: `Series ${index + 1}`,
-          dataIsSortedInX: true,
-          dataEvenlySpacedInX: true,
-          containsNaN: false,
-        });
-        sciChartSurface.renderableSeries.add(
-          new FastLineRenderableSeries(wasmContext, {
-            dataSeries,
-            stroke,
-            strokeThickness: 2,
-          }),
-        );
-        return dataSeries;
-      });
-
-      sciChartSurface.chartModifiers.add(
-        new ZoomPanModifier(),
-        new MouseWheelZoomModifier(),
-        new ZoomExtentsModifier(),
-      );
-
-      renderCountRef.current = 0;
-      const onRendered = () => {
-        renderCountRef.current += 1;
-      };
-      sciChartSurface.rendered.subscribe(onRendered);
-
-      chartRef.current = {
-        sciChartSurface,
-        dataSeriesList,
-        generators: [
-          new RandomWalkGenerator(0, 10),
-          new RandomWalkGenerator(0, 20),
-          new RandomWalkGenerator(0, 30),
-        ],
-      };
-
-      return {
-        sciChartSurface,
-        destructor: () => {
-          sciChartSurface.rendered.unsubscribe(onRendered);
-          if (chartRef.current?.sciChartSurface === sciChartSurface) {
-            clearTimers();
-            chartRef.current = null;
-          }
-        },
-      };
-    },
-    [clearTimers],
-  );
-
-  const handleChartInit = useCallback(() => {
+  const handleChartInit = useCallback((chart) => {
+    chartRef.current = chart;
+    chart.controls.startUpdate();
     setIsChartReady(true);
+    setIsRunning(true);
   }, []);
 
-  const handleChartDelete = useCallback(
-    ({ sciChartSurface }) => {
-      if (chartRef.current?.sciChartSurface === sciChartSurface) {
-        clearTimers();
-        chartRef.current = null;
-        setIsRunning(false);
-        setIsChartReady(false);
-      }
-    },
-    [clearTimers],
-  );
+  const handleChartDelete = useCallback((chart) => {
+    chart.controls.stopUpdate();
+    if (chartRef.current === chart) {
+      chartRef.current = null;
+      setIsChartReady(false);
+      setIsRunning(false);
+    }
+  }, []);
 
-  const startUpdate = useCallback(() => {
+  const toggleSimulation = useCallback(() => {
     const chart = chartRef.current;
-    if (isRunningRef.current || !chart) return;
+    if (!chart) return;
 
-    isRunningRef.current = true;
-    setIsRunning(true);
-    let previousRenderCount = renderCountRef.current;
-    let previousStatsTime = performance.now();
-
-    updateTimerRef.current = window.setInterval(() => {
-      const currentChart = chartRef.current;
-      if (
-        currentChart?.sciChartSurface !== chart.sciChartSurface ||
-        chart.sciChartSurface.isDeleted
-      ) {
-        stopUpdate();
-        return;
-      }
-
-      chart.dataSeriesList.forEach((dataSeries, index) => {
-        const { xValues, yValues } = chart.generators[index].getSeries(
-          POINTS_PER_TICK,
-        );
-        dataSeries.appendRange(xValues, yValues);
-      });
-    }, UPDATE_INTERVAL_MS);
-
-    statsTimerRef.current = window.setInterval(() => {
-      const now = performance.now();
-      const elapsed = now - previousStatsTime;
-      setFps(
-        elapsed > 0
-          ? Math.round(
-              ((renderCountRef.current - previousRenderCount) * 1000) / elapsed,
-            )
-          : 0,
-      );
-      setPointCount(chart.dataSeriesList[0].count());
-      previousRenderCount = renderCountRef.current;
-      previousStatsTime = now;
-    }, STATS_INTERVAL_MS);
-  }, [stopUpdate]);
-
-  useEffect(
-    () => () => {
-      clearTimers();
-    },
-    [clearTimers],
-  );
+    if (isRunning) {
+      chart.controls.stopUpdate();
+      setIsRunning(false);
+    } else {
+      chart.controls.startUpdate();
+      setIsRunning(true);
+    }
+  }, [isRunning]);
 
   return (
     <main className="app">
       <header className="app-header">
         <p className="eyebrow">SciChart.js + React</p>
-        <h1>High-frequency live chart</h1>
+        <h1>Realtime Surface Mesh 3D Chart</h1>
         <p>
-          Three live random walks, each receiving 1,000 points every 10 ms.
-          Pause updates to explore the data.
+          A 50 x 50 height map animates at 50 updates per second. Orbit the
+          surface by dragging and zoom with the mouse wheel.
         </p>
       </header>
 
       <section className="chart-controls" aria-label="Chart controls">
         <button
           className="control-button control-button-primary"
-          onClick={startUpdate}
-          disabled={!isChartReady || isRunning}
+          onClick={toggleSimulation}
+          disabled={!isChartReady}
         >
-          Start updates
+          {isRunning ? "Pause simulation" : "Resume simulation"}
         </button>
-        <button
-          className="control-button"
-          onClick={stopUpdate}
-          disabled={!isRunning}
-        >
-          Stop
-        </button>
-        <div className="chart-stat" aria-live="polite">
-          <span className="chart-stat-label">Render FPS</span>
-          <strong>{fps}</strong>
-        </div>
-        <div className="chart-stat" aria-live="polite">
-          <span className="chart-stat-label">Points / series</span>
-          <strong>
-            {pointCount.toLocaleString()} / {MAX_POINTS_PER_SERIES.toLocaleString()}
-          </strong>
-        </div>
+        <span className="simulation-status" aria-live="polite">
+          {isRunning ? "Live - 50 updates/sec" : "Paused"}
+        </span>
+        <span className="chart-hint-inline">
+          Drag to orbit | Scroll to zoom | Double-click to reset the camera
+        </span>
       </section>
 
-      <section className="chart-frame" aria-label="Live multi-series chart">
+      <section className="chart-frame" aria-label="Realtime 3D surface mesh">
         <SciChartReact
           initChart={initChart}
           onInit={handleChartInit}
           onDelete={handleChartDelete}
           className="chart"
           style={{ width: "100%", height: "100%" }}
-          fallback={<div className="chart-loading">Initializing chart...</div>}
+          fallback={<div className="chart-loading">Initializing 3D chart...</div>}
         />
       </section>
-
-      <p className="chart-hint">
-        Drag to pan, scroll to zoom, and use the chart’s zoom-extents control to
-        reset the view. Each series retains its latest{" "}
-        {MAX_POINTS_PER_SERIES.toLocaleString()} points.
-      </p>
 
       <section className="licensing" aria-labelledby="licensing-heading">
         <h2 id="licensing-heading">Licensing</h2>
@@ -286,4 +206,4 @@ function RealtimeChart() {
   );
 }
 
-export default RealtimeChart;
+export default Realtime3DChart;

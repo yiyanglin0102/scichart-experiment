@@ -80,22 +80,15 @@
   background: #2d7fc3;
 }
 
-.chart-stat {
-  display: flex;
-  min-width: 116px;
-  flex-direction: column;
-  gap: 2px;
-  margin-left: 8px;
+.simulation-status {
+  color: #83b3e4;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
-.chart-stat-label {
-  color: #93a6b9;
-  font-size: 0.75rem;
-}
-
-.chart-stat strong {
+.chart-hint-inline {
   color: #f3f6fa;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
 }
 
 .chart-frame {
@@ -119,13 +112,6 @@
   height: 100%;
   place-items: center;
   color: #aab8c8;
-}
-
-.chart-hint {
-  margin: 12px 0 0;
-  color: #93a6b9;
-  font-size: 0.875rem;
-  line-height: 1.5;
 }
 
 .licensing {
@@ -161,9 +147,5 @@
   .chart-frame {
     height: 62vh;
     min-height: 320px;
-  }
-
-  .chart-stat {
-    margin-left: 0;
   }
 }
